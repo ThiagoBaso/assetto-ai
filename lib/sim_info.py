@@ -193,14 +193,23 @@ class LTSimInfo:
         self.graphics = SPageFileGraphic.from_buffer(self._acpmf_graphics)
         self.static = SPageFileStatic.from_buffer(self._acpmf_static)
 
-    def close(self):
-        """ Closes the session shared memory. """
-        self._acpmf_physics.close()
-        self._acpmf_graphics.close()
-        self._acpmf_static.close()
+def close(self):
+    """Closes the session shared memory."""
 
-    def __del__(self):
+    self.physics = None
+    self.graphics = None
+    self.static = None
+
+    self._acpmf_physics.close()
+    self._acpmf_graphics.close()
+    self._acpmf_static.close()
+
+
+def __del__(self):
+    try:
         self.close()
+    except (BufferError, AttributeError):
+        pass
 
 info = LTSimInfo()
 

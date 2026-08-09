@@ -1,2 +1,3 @@
 # Add project dependencies here
 psutil
+pygame
