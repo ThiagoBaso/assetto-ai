@@ -1,3 +1,5 @@
 # Add project dependencies here
 psutil
 pygame
+numpy
+pandas
