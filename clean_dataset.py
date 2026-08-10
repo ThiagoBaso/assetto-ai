@@ -115,13 +115,13 @@ def main():
 
     if "lap" in df.columns:
 
-        lap_mask = df["lap"] == 7
+        lap_mask = df["lap"] == 13
 
         lap_removed = lap_mask.sum()
 
         df = df.loc[~lap_mask].copy()
 
-    print(f"[4] Volta 7 removida: {lap_removed:,}")
+    print(f"[4] Volta 13 removida: {lap_removed:,}")
 
     # ========================================================
     # RESET INDEX
@@ -220,11 +220,11 @@ def main():
     if "lap" in df.columns:
 
         lap7_remaining = (
-            df["lap"] == 7
+            df["lap"] == 13
         ).sum()
 
         print(
-            f"Lap 7 restante: "
+            f"Lap 13 restante: "
             f"{lap7_remaining:,}"
         )
 

@@ -43,6 +43,8 @@ class Telemetry:
             "pos_y": float(g.carCoordinates[1]),
             "pos_z": float(g.carCoordinates[2]),
 
+            "heading": float(p.heading), 
+
             "lap_progress": float(g.normalizedCarPosition),
 
             "lap": int(g.completedLaps),

@@ -3,3 +3,9 @@ psutil
 pygame
 numpy
 pandas
+scipy
+matplotlib 
+torch
+joblib
+scikit-learn
+pyvjoy
