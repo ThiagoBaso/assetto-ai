@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -25,9 +24,11 @@ FEATURE_COLS = [
     'tyre_temp_fl', 'tyre_temp_fr', 'tyre_temp_rl', 'tyre_temp_rr',
     'lap_progress', 'sector', 'surface_grip', 'tyres_out',
     'heading_error', 'lateral_position',
+    'curvature_0m',            # curvatura no ponto atual (nova)
     'curvature_5m', 'curvature_10m', 'curvature_20m', 'curvature_30m', 'curvature_50m',
     'curve_direction',
-    'speed_error'
+    'speed_error',
+    's_current'                # posição longitudinal contínua (nova)
 ]
 
 TARGET_COLS = ['steering_input', 'throttle_input', 'brake_input']
@@ -40,7 +41,7 @@ LEARNING_RATE = 0.001
 HIDDEN_LAYERS = [256, 256, 128]
 
 # =============================================
-# DISPOSITIVO (GPU/CPU)
+# DISPOSITIVO
 # =============================================
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Usando dispositivo: {device}")
@@ -63,21 +64,36 @@ if missing_targets:
 X = df[FEATURE_COLS].values
 y = df[TARGET_COLS].values
 
+# =============================================
+# SPLIT POR VOLTA (para evitar overfitting temporal)
+# =============================================
+train_laps = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+val_laps   = [9, 10]
+test_laps  = [11, 12]
+
+train_idx = df.index[df['lap'].isin(train_laps)].to_numpy()
+val_idx   = df.index[df['lap'].isin(val_laps)].to_numpy()
+test_idx  = df.index[df['lap'].isin(test_laps)].to_numpy()
+
+print(f"Treino: {len(train_idx)} | Validação: {len(val_idx)} | Teste: {len(test_idx)}")
+
+# =============================================
+# SCALER SOMENTE NO TREINO
+# =============================================
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+scaler.fit(X[train_idx])
 
-total_samples = len(X_scaled)
-indices = np.arange(total_samples)
-train_idx, test_idx = train_test_split(indices, test_size=TEST_SIZE, random_state=42)
-train_idx, val_idx = train_test_split(train_idx, test_size=VAL_SIZE/(1-TEST_SIZE), random_state=42)
+X_train = scaler.transform(X[train_idx])
+X_val   = scaler.transform(X[val_idx])
+X_test  = scaler.transform(X[test_idx])
 
-X_train, y_train = X_scaled[train_idx], y[train_idx]
-X_val, y_val = X_scaled[val_idx], y[val_idx]
-X_test, y_test = X_scaled[test_idx], y[test_idx]
+y_train = y[train_idx]
+y_val   = y[val_idx]
+y_test  = y[test_idx]
 
-print(f"Treino: {len(X_train)} | Validação: {len(X_val)} | Teste: {len(X_test)}")
-
-# Tensores no device
+# =============================================
+# TENSORES
+# =============================================
 X_train_t = torch.tensor(X_train, dtype=torch.float32).to(device)
 y_train_t = torch.tensor(y_train, dtype=torch.float32).to(device)
 X_val_t = torch.tensor(X_val, dtype=torch.float32).to(device)
@@ -92,7 +108,7 @@ train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 # MODELO
 # =============================================
 class DrivingModel(nn.Module):
-    def __init__(self, input_dim, output_dim=3, hidden_layers=[256, 256, 128]):
+    def __init__(self, input_dim, hidden_layers=[256, 256, 128]):
         super().__init__()
         layers = []
         prev_dim = input_dim
@@ -100,23 +116,37 @@ class DrivingModel(nn.Module):
             layers.append(nn.Linear(prev_dim, h))
             layers.append(nn.ReLU())
             prev_dim = h
-        layers.append(nn.Linear(prev_dim, output_dim))
-        self.net = nn.Sequential(*layers)
+
+        self.shared = nn.Sequential(*layers)
+
+        # Cabeças de saída com ativações corretas
+        self.steering_head = nn.Sequential(
+            nn.Linear(prev_dim, 1),
+            nn.Tanh()
+        )
+        self.throttle_head = nn.Sequential(
+            nn.Linear(prev_dim, 1),
+            nn.Sigmoid()
+        )
+        self.brake_head = nn.Sequential(
+            nn.Linear(prev_dim, 1),
+            nn.Sigmoid()
+        )
 
     def forward(self, x):
-        return self.net(x)
+        shared = self.shared(x)
+        steer = self.steering_head(shared)
+        throttle = self.throttle_head(shared)
+        brake = self.brake_head(shared)
+        return torch.cat([steer, throttle, brake], dim=1)
 
 input_dim = len(FEATURE_COLS)
-model = DrivingModel(input_dim, output_dim=len(TARGET_COLS), hidden_layers=HIDDEN_LAYERS).to(device)
+model = DrivingModel(input_dim, hidden_layers=HIDDEN_LAYERS).to(device)
 
 # =============================================
-# FUNÇÃO DE PERDA PONDERADA (NOVO)
+# FUNÇÃO DE PERDA PONDERADA
 # =============================================
 class WeightedMSELoss(nn.Module):
-    """
-    MSE com pesos diferentes para cada target.
-    Exemplo: weights = [1.0, 0.5, 3.0] -> maior peso para brake.
-    """
     def __init__(self, weights=None):
         super().__init__()
         if weights is None:
@@ -125,12 +155,11 @@ class WeightedMSELoss(nn.Module):
 
     def forward(self, pred, target):
         diff = (pred - target) ** 2
-        # Aplica pesos (broadcast automático)
         weighted_diff = diff * self.weights.to(pred.device)
         return weighted_diff.mean()
 
-# Pesos: steer=1.0, throttle=0.5, brake=3.0
-criterion = WeightedMSELoss(weights=[1.0, 0.05, 5.0])
+# Pesos: maior para steering (precisão na direção)
+criterion = WeightedMSELoss(weights=[2.0, 0.5, 1.0])
 
 optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -160,11 +189,11 @@ for epoch in range(EPOCHS):
         val_loss = criterion(val_pred, y_val_t).item()
     val_losses.append(val_loss)
 
-    if (epoch+1) % 10 == 0:
+    if (epoch + 1) % 10 == 0:
         print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {train_loss:.4f} - Val Loss: {val_loss:.4f}")
 
 # =============================================
-# AVALIAÇÃO FINAL (usando MSE sem peso para métrica justa)
+# AVALIAÇÃO FINAL
 # =============================================
 mse_unweighted = nn.MSELoss()
 model.eval()
@@ -188,7 +217,7 @@ print(f"Scaler salvo em: {SCALER_FILE}")
 # =============================================
 # GRÁFICOS
 # =============================================
-plt.figure(figsize=(8,5))
+plt.figure(figsize=(8, 5))
 plt.plot(train_losses, label='Treino')
 plt.plot(val_losses, label='Validação')
 plt.xlabel('Época')

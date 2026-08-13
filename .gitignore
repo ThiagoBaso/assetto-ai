@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# OS files
+.DS_Store
+Thumbs.db
+
 # Virtual environments
 .venv/
 venv/
@@ -29,3 +33,15 @@ dist/
 
 # Logs
 *.log
+
+# Project data and generated outputs
+data/
+comparison/
+recovery_log*.csv
+
+# Model/training artifacts
+*.pth
+*.pt
+*.onnx
+*.save
+*.pkl
