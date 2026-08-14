@@ -38,34 +38,6 @@ if MODE == 0:
 
         print("\nPressione Ctrl+C para sair.")
         time.sleep(0.1)
-elif MODE == 1:
-
-    telemetry = Telemetry()
-
-    try:
-
-        while True:
-
-            state = telemetry.read()
-
-            print(
-                f"Velocidade: {state['speed']:.1f} km/h | "
-                f"RPM: {state['rpm']} | "
-                f"Marcha: {state['gear']} | "
-                f"Volante: {state['steer_angle']:.2f} | "
-                f"Gas: {state['gas']:.2f} | "
-                f"Freio: {state['brake']:.2f}"
-            )
-
-            time.sleep(0.1)
-
-    except KeyboardInterrupt:
-
-        print("\nEncerrando...")
-
-    finally:
-
-        info.close()
 
 elif MODE == 2:
     from recorder import TelemetryRecorder
@@ -73,29 +45,3 @@ elif MODE == 2:
     recorder = TelemetryRecorder()
 
     recorder.record(duration=2400)
-
-elif MODE == 3:
-    from input_reader import InputReader
-
-
-    controller = InputReader()
-
-    try:
-        while True:
-            inputs = controller.read()
-
-            print(
-                f"\r"
-                f"Steer: {inputs['steering_input']:+.3f} | "
-                f"Brake: {inputs['brake_input']:.3f} | "
-                f"Throttle: {inputs['throttle_input']:.3f}",
-                end=""
-            )
-
-            time.sleep(0.05)
-
-    except KeyboardInterrupt:
-        print("\nEncerrando...")
-
-    finally:
-        controller.close()
