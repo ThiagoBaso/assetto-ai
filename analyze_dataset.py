@@ -616,12 +616,6 @@ def main():
 
     print("\nAnálise concluída.")
 
-    print(
-        "\nPRÓXIMO PASSO:"
-        "\nEnvie o resultado deste relatório."
-        "\nNão precisamos enviar o CSV inteiro."
-    )
-
 
 if __name__ == "__main__":
     main()
