@@ -72,7 +72,7 @@ elif MODE == 2:
 
     recorder = TelemetryRecorder()
 
-    recorder.record(duration=1200)
+    recorder.record(duration=2400)
 
 elif MODE == 3:
     from input_reader import InputReader
